@@ -1,0 +1,399 @@
+/*
+Ali Kalkandelen
+03/21/2016
+IT 266 Spring 2016
+*/
+
+float genScore = 0;
+float level = 4;
+float levelUp = 1;
+float thd = 0;
+float go = 0;
+
+
+
+void Go(vector goorg){
+	go = 1;
+	sys.drawText("You Win!", goorg, 5, '1 .2 .2', 1, 50);
+	sys.println("GAME OVER");
+	sys.wait(1);
+	sys.println("Score: " + genScore);
+	sys.wait(1);
+	sys.println("THANKS FOR PLAYING");
+	return;
+}
+
+// Create a target_null for every deathmatch spawnpoint,
+float createSpawns()
+{
+	float i, j = 0;
+	entity spawny, newNull;
+	string namey;
+	for (i = 1; i < 64; i++) { //there are at most 64 spawnpoints
+		namey = ("info_player_deathmatch_" + i); //looks through the map for all the spawnpoints
+		spawny = sys.getEntity(namey);
+		if (spawny) {
+			namey = "SpawnPoint_" + j;
+			sys.setSpawnArg( "name", namey );
+			sys.setSpawnArg( "origin", spawny.getWorldOrigin() );
+			newNull = sys.spawn( "target_null" );
+			j++;
+		}
+	}
+	return j;
+}
+
+// Set spawnargs of the func_spawner to target all of the new spawn nulls
+void setSpawns( float j )
+{
+	float i;
+	entity spawny;
+	string namey;
+	for (i = 0; i <= j; i++) {
+		namey = ("SpawnPoint_" + i);
+		spawny = sys.getEntity(namey);
+		if (spawny) {
+			sys.setSpawnArg("target_" + i, namey );
+		}
+	}
+}
+
+//displays the score by using sys.drawtext. I couldnt find a way to display it on the hud
+void showScore (string text, vector origin) {
+	float frameTime = sys.getFrameTime();
+	float i, score;
+	vector org = origin, color;
+
+	score = sys.strToFloat( text ) ;
+	genScore = genScore + score;
+
+	for ( i = 2; i > 0; i = i - frameTime ) {
+
+		if(thd == 0 && go != 1){
+			sys.waitFrame();
+			sys.drawText("LEVEL " + (level+1) + " !", origin, 3, '1 1 1', 1, 5);
+		}
+
+		org_z = org_z + .3;
+		sys.drawText( genScore, org, 1 , '1 0.5 1', 1, 0 );
+		sys.waitFrame();
+	}
+}
+
+// Drop some loot where the monster died.
+void dropLoot ( vector org, string lootClass, float count)
+{
+	float i;
+	entity loots;
+	vector toss;
+	float dist = 128;			// radius distance to spawn goodies
+
+	for( i = 0; i < count; i++ ) {
+		toss_x = dist - sys.random(2 * dist);
+		toss_y = dist - sys.random(2 * dist);
+		toss_z = dist;
+		sys.setSpawnArg( "origin", org );
+		sys.setSpawnArg( "nodrop", 1 );
+		loots = sys.spawn( lootClass );
+		sys.waitFrame();
+		loots.setLinearVelocity( toss ); //makes the loot get "tossed" instead of just dropping down
+	}
+}
+
+// Drop one of the single player weapon mods
+void tossMod( vector org )
+{
+	string mod;
+	entity loots;
+	vector toss;
+		toss_x = 128 - sys.random(256);
+		toss_y = 128 - sys.random(256);
+		toss_z = 128;
+
+	float val = sys.random(10);
+	if (val > 9) mod = "weaponmod_shotgun_ammo";
+	else if (val > 8) mod = "weaponmod_machinegun_ammo";
+	else if (val > 7) mod = "weaponmod_hyperblaster_bounce1";
+	else if (val > 6) mod = "weaponmod_hyperblaster_bounce2";
+	else if (val > 5) mod = "weaponmod_nailgun_seek";
+	else if (val > 4) mod = "weaponmod_nailgun_power";
+	else if (val > 3) mod = "weaponmod_railgun_penetrate";
+	else if (val > 2) mod = "weaponmod_rocketlauncher_seek";
+	else if (val > 1) mod = "weaponmod_rocketlauncher_burst";
+	else mod = "weaponmod_lightninggun_chain";
+
+	sys.setSpawnArg( "origin", org );
+	loots = sys.spawn( mod );
+	sys.waitFrame();
+	loots.setLinearVelocity( toss );
+}
+
+
+// check the killed monster's spawnclass and decide on a drop and score
+void monsterDeath( entity victim )
+{
+	string monsterType = victim.getKey( "classname" );	// what kind of monster is it?
+	vector monsterOrg, monsterSize, monsterDrop, monsterScore;
+
+	float score = 3;	// score on general
+
+	monsterOrg = victim.getWorldOrigin();		// where was it killed?
+	monsterSize = victim.getSize();			// how big was it?  for deciding how high to toss items and print score
+
+	monsterDrop = monsterOrg;
+	monsterDrop_z = monsterDrop_z + monsterSize_z * 0.5;	// drop items waist high
+
+	monsterScore = monsterOrg;
+	monsterScore_z = monsterScore_z + monsterSize_z * 0.75;		// print score pip about head high
+
+	float val = sys.random(1);
+
+	if ( monsterType == "monster_failed_transfer" || monsterType == "monster_slimy_transfer") {
+		if ( val > 0.6 ) dropLoot( monsterDrop, "item_health_shard_mp", 1);
+		else if( val > 0.2 ) dropLoot( monsterDrop, "item_armor_shard", 1);
+
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_strogg_marine" ) {
+		if ( val > 0.7 ) dropLoot( monsterDrop, "ammo_hyperblaster_mp", 2 );
+		else if ( val > 0.5 ) dropLoot( monsterDrop, "item_health_shard_mp", 1);
+		else if ( val > 0.3 ) dropLoot( monsterDrop, "item_armor_shard", 1);
+
+		score = score * 2;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_strogg_marine_sgun" ) {
+		if ( val > 0.7 ) dropLoot( monsterDrop, "ammo_shotgun_mp", 2 );
+		else if ( val > 0.5 ) dropLoot( monsterDrop, "item_health_shard_mp", 1);
+		else if ( val > 0.3 ) dropLoot( monsterDrop, "item_armor_shard", 1);
+
+    score = score * 3;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_strogg_marine_mgun" )  {
+		if ( val > 0.7 ) dropLoot( monsterDrop, "ammo_machinegun_mp", 2);
+		else if ( val > 0.5 ) dropLoot( monsterDrop, "item_health_shard_mp", 1);
+		else if ( val > 0.3 ) dropLoot( monsterDrop, "item_armor_shard", 1);
+    score = score * 3;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_sentry" ) {
+		if ( val > 0.66 ) dropLoot( monsterDrop, "item_armor_shard", 4);
+		else if ( val > 0.33 ) tossMod( monsterDrop );
+		else dropLoot( monsterDrop, "item_health_shard_mp", 4);
+
+		score = score * 4;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_grunt" ) {
+		if ( val > 0.5 ) dropLoot( monsterDrop, "item_health_small_mp", 1);
+		else dropLoot( monsterDrop, "item_armor_shard", 4);
+
+		score = score * 5;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_berserker" ) {
+		if ( val > 0.5 ) dropLoot( monsterDrop, "item_health_small_mp", 1);
+		else if ( val > 0.2 ) dropLoot( monsterDrop, "ammo_lightninggun_mp", 1);
+
+		score = score * 5;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_gunner" ) {
+		if ( val > 0.6 ) dropLoot( monsterDrop, "ammo_nailgun_mp", 1);
+		else if ( val > 0.2 ) dropLoot( monsterDrop, "ammo_grenadelauncher_mp", 1);
+		else dropLoot( monsterDrop, "item_health_small_mp", 1);
+
+		score = score * 6;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_iron_maiden" ) {
+		if ( val > 0.6 ) dropLoot( monsterDrop, "ammo_rocketlauncher_mp", 1);
+		else if ( val > 0.3 ) dropLoot( monsterDrop, "ammo_hyperblaster_mp", 1);
+		else dropLoot( monsterDrop, "item_health_small_mp", 1);
+
+		score = score * 9;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_gladiator" ) {
+		if ( val > 0.85 ) tossMod( monsterDrop );
+		else if ( val > 0.5 ) dropLoot( monsterDrop, "ammo_railgun_mp", 1);
+		else if ( val > 0.3 ) dropLoot( monsterDrop, "item_health_small_mp", 1);
+		else if ( val > 0.2 ) dropLoot( monsterDrop, "item_health_large_mp", 1);
+
+		score = score * 10;
+		thread showScore( score, monsterScore);
+
+	} else if ( monsterType == "monster_lt_tank" ) {
+		if ( val > 0.85 ) tossMod( monsterDrop );
+		else if ( val > 0.5 ) dropLoot( monsterDrop, "ammo_rocketlauncher_mp", 2);
+		else if ( val > 0.2 ) dropLoot( monsterDrop, "item_armor_large_mp", 1);
+		else dropLoot( monsterDrop, "item_health_mega", 1);
+
+		score = score * 15;
+		thread showScore( score, monsterScore);
+	}
+
+	thd = thd - 1;
+	sys.println("Enemies Left: " + thd);
+	if(thd == 0){
+		if(level == 5){
+			Go(monsterOrg);
+			return;
+		}
+		levelUp = 1;
+	}
+}
+
+// Create the func_spawner that spawns the waves
+void createSpawner(float j)
+{
+	thd = 5 + (1 * level);
+
+ 	// Picks in random from a list of 28 entities. low lvl > medium > high
+	sys.setSpawnArg("def_spawn", "monster_failed_transfer");
+	sys.setSpawnArg("def_spawn_1", "monster_failed_transfer");
+	sys.setSpawnArg("def_spawn_2", "monster_failed_transfer");
+	sys.setSpawnArg("def_spawn_3", "monster_slimy_transfer");
+	sys.setSpawnArg("def_spawn_4", "monster_slimy_transfer");
+	sys.setSpawnArg("def_spawn_5", "monster_slimy_transfer");
+
+	if(level > 1){
+	sys.setSpawnArg("def_spawn_6", "monster_strogg_marine");
+	sys.setSpawnArg("def_spawn_7", "monster_strogg_marine");
+	sys.setSpawnArg("def_spawn_8", "monster_strogg_marine");
+	sys.setSpawnArg("def_spawn_9", "monster_strogg_marine");
+	}
+	if(level > 2){
+	sys.setSpawnArg("def_spawn_10", "monster_strogg_marine_sgun");
+	sys.setSpawnArg("def_spawn_11", "monster_strogg_marine_sgun");
+	sys.setSpawnArg("def_spawn_12", "monster_strogg_marine_sgun");
+	sys.setSpawnArg("def_spawn_13", "monster_strogg_marine_sgun");
+	sys.setSpawnArg("def_spawn_14", "monster_strogg_marine_mgun");
+	sys.setSpawnArg("def_spawn_15", "monster_strogg_marine_mgun");
+	sys.setSpawnArg("def_spawn_16", "monster_strogg_marine_mgun");
+	sys.setSpawnArg("def_spawn_17", "monster_strogg_marine_mgun");
+	}
+	if(level > 3){
+	sys.setSpawnArg("def_spawn_18", "monster_gunner");
+	sys.setSpawnArg("def_spawn_19", "monster_gunner");
+	sys.setSpawnArg("def_spawn_20", "monster_grunt");
+	sys.setSpawnArg("def_spawn_21", "monster_grunt");
+	sys.setSpawnArg("def_spawn_22", "monster_sentry");
+	sys.setSpawnArg("def_spawn_23", "monster_sentry");
+	}
+	if(level > 4){
+	sys.setSpawnArg("def_spawn_24", "monster_berserker");
+	sys.setSpawnArg("def_spawn_25", "monster_berserker");
+	sys.setSpawnArg("def_spawn_26", "monster_iron_maiden");
+	sys.setSpawnArg("def_spawn_27", "monster_gladiator");
+	sys.setSpawnArg("def_spawn_28", "monster_lt_tank");
+	}
+
+	sys.waitFrame();
+
+	sys.setSpawnArg("max_active", "999"); // Not caring about performance here
+	sys.setSpawnArg("delay", 1 );
+	sys.setSpawnArg("auto_target", "1");
+	sys.setSpawnArg("face_enemy", "1");
+	sys.setSpawnArg("skipVisible", "0"); //spawn targets even if you can see them
+	sys.setSpawnArg("remove", "0");				// don't disappear from the entity list if you die
+	sys.setSpawnArg("spawn_neverdormant", "1"); //Makes sure the enemy is not standing around
+  sys.setSpawnArg("count", thd);
+	sys.setSpawnArg("spawn_script_death", "monsterDeath");	// for spawning loots
+
+	sys.waitFrame();
+
+	setSpawns( j );	// set previously created nulls as possible targets
+
+	entity monstSpawner = sys.spawn( "func_spawner" );
+	sys.trigger(monstSpawner);
+}
+
+//TODO: Clean after GameOver
+void spawnInit(){
+
+	float j = createSpawns();	// make nulls for spawn points
+
+	//infinite loop to watch for level changes. wait a second to counteract the runaway loop error.
+	  while(1 == 1){
+		if(go == 1)return;
+	  sys.wait(1);
+	    if(levelUp == 1){
+				level++;levelUp++;
+	      createSpawner(j);
+				sys.println("LVL " + level);
+	    }
+	  }
+}
+
+void main()
+{
+	// Caches all possible monsters and items in main mem
+	entity tempy, tempy2, tempy3;		// three at a time so it doesn't take 36 game frames
+
+	tempy = sys.spawn( "monster_strogg_marine" );
+	tempy2 = sys.spawn( "monster_strogg_marine_sgun" );
+	tempy3 = sys.spawn( "monster_strogg_marine_mgun" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "monster_gunner" );
+	tempy2 = sys.spawn( "monster_grunt" );
+	tempy3 = sys.spawn( "monster_iron_maiden" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "monster_berserker" );
+	tempy2 = sys.spawn( "monster_sentry" );
+	tempy3 = sys.spawn( "monster_gladiator" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "monster_lt_tank" );
+	tempy2 = sys.spawn( "item_health_small_mp" );
+	tempy3 = sys.spawn( "item_health_large_mp" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "ammo_machinegun_mp" );
+	tempy2 = sys.spawn( "ammo_shotgun_mp" );
+	tempy3 = sys.spawn( "ammp_hyperblaster_mp" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "ammo_nailgun_mp" );
+	tempy2 = sys.spawn( "ammo_railgun_mp" );
+	tempy3 = sys.spawn( "ammo_lightninggun_mp" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "ammo_grenadelauncher_mp" );
+	tempy2 = sys.spawn( "ammo_rocketlauncher_mp" );
+	tempy3 = sys.spawn( "ammo_machinegun_mp" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "item_health_mega" );
+	tempy2 = sys.spawn( "item_armor_large_mp" );
+	tempy3 = sys.spawn( "item_armor_shard_mp" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+	tempy = sys.spawn( "item_health_shard_mp" );
+	tempy2 = sys.spawn( "monster_failed_transfer" );
+	tempy3 = sys.spawn( "monster_slimy_transfer" );
+	sys.waitFrame();
+	tempy.remove(); tempy2.remove(); tempy3.remove();
+
+
+	sys.println("\n\n\n\n");
+	sys.wait(1);
+	sys.println("Welcome to Q4 Zombie Mode");
+	sys.wait(1);
+	sys.println("There is 5 Levels, then you win.");
+	sys.wait(1);
+	sys.println("Good Luck!");
+	sys.wait(1);
+	thread spawnInit();
+}
